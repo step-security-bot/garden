@@ -123,6 +123,8 @@ export async function getEnterpriseConfig(currentDirectory: string) {
  */
 export class CloudApi {
   private intervalId: NodeJS.Timer | null
+  private readonly sessionId: string
+  private webSocketClient: EnterpriseWebSocketClient | null
   private log: LogEntry
   private intervalMsec = 4500 // Refresh interval in ms, it needs to be less than refreshThreshold/2
   private apiPrefix = "api"
@@ -135,10 +137,22 @@ export class CloudApi {
   public namespaceId?: number
   public sessionRegistered = false
 
-  constructor(log: LogEntry, enterpriseDomain: string, projectId: string) {
+  constructor({
+    log,
+    enterpriseDomain,
+    projectId,
+    sessionId,
+  }: {
+    log: LogEntry
+    enterpriseDomain: string
+    projectId: string
+    sessionId: string
+  }) {
     this.log = log
     this.domain = enterpriseDomain
     this.projectId = projectId
+    this.sessionId = sessionId
+    this.webSocketClient = null
   }
 
   /**
@@ -153,10 +167,12 @@ export class CloudApi {
   static async factory({
     log,
     currentDirectory,
+    sessionId,
     skipLogging = false,
   }: {
     log: LogEntry
     currentDirectory: string
+    sessionId: string
     skipLogging?: boolean
   }) {
     log.debug("Initializing Garden Cloud API client.")
@@ -173,7 +189,7 @@ export class CloudApi {
       return null
     }
 
-    const api = new CloudApi(log, config.domain, config.projectId)
+    const api = new CloudApi({ log, enterpriseDomain: config.domain, projectId: config.projectId, sessionId })
     const tokenIsValid = await api.checkClientAuthToken()
 
     const distroName = getCloudDistributionName(config.domain)
@@ -333,6 +349,9 @@ export class CloudApi {
       clearInterval(this.intervalId)
       this.intervalId = null
     }
+    if (this.webSocketClient) {
+      this.webSocketClient.close()
+    }
   }
 
   private async refreshTokenIfExpired() {
@@ -476,6 +495,20 @@ export class CloudApi {
     }
   }
 
+  async startWebSocketClient() {
+    const authToken = await CloudApi.getAuthToken(this.log)
+    if (!authToken) {
+      this.log.debug("No auth token available, skipping websocket connection.")
+      return
+    }
+    this.webSocketClient = new EnterpriseWebSocketClient({
+      log: this.log,
+      enterpriseDomain: this.domain,
+      authToken,
+      sessionId: this.sessionId,
+    })
+  }
+
   async get<T>(path: string, opts: ApiFetchOptions = {}) {
     const { headers, retry, retryDescription, maxRetries } = opts
     return await this.apiFetch<T>(path, {
@@ -590,5 +623,37 @@ export class CloudApi {
     }
     this.log.debug(`Checked client auth token with ${getCloudDistributionName(this.domain)} - valid: ${valid}`)
     return valid
+  }
+}
+
+export class EnterpriseWebSocketClient {
+  private log: LogEntry
+  private garden: Garden | undefined
+  private ws: WebSocket
+  private url: string
+
+  constructor({
+    log,
+    enterpriseDomain,
+    authToken,
+    sessionId
+  }: {
+    log: LogEntry
+    enterpriseDomain: string
+    authToken: string
+    sessionId: string
+  }) {
+    this.log = log
+    const tokenParam = !!gardenEnv.GARDEN_AUTH_TOKEN ? "ciToken" : "accessToken"
+    const getWsUrl = (token: string) => `ws://${enterpriseDomain}/ws/cli?${tokenParam}=${token}&sessionId=${sessionId}`
+    this.log.debug(`Connecting websocket client to ${getWsUrl("[FILTERED]")}`)
+    this.url = getWsUrl(authToken)
+    this.ws = new WebSocket(this.url)
+  }
+
+  setGarden(garden: Garden) {
+  }
+
+  close() {
   }
 }
