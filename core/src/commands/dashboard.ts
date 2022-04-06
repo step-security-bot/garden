@@ -72,6 +72,8 @@ export class DashboardCommand extends Command<Args, Opts> {
       }
       process.exit(1)
     })
+    // TODO: Return `sessionSettings`
+    return {}
   }
 
   async action({ garden, log }: CommandParams<Args, Opts>): Promise<CommandResult<{}>> {

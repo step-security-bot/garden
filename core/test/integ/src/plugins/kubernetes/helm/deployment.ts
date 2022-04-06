@@ -201,7 +201,11 @@ describe("deployHelmService", () => {
   })
 
   it("should mark a chart that has been paused by Garden Cloud AEC as outdated", async () => {
-    const fakeCloudApi = new CloudApi(getLogger().placeholder(), "https://test.cloud.garden.io", "project-id")
+    const fakeCloudApi = new CloudApi({
+      log: getLogger().placeholder(),
+      enterpriseDomain: "https://test.cloud.garden.io",
+      projectId: "project-id",
+    })
     const projectRoot = resolve(dataDir, "test-projects", "helm")
     const gardenWithCloudApi = await makeTestGarden(projectRoot, { cloudApi: fakeCloudApi, noCache: true })
 

@@ -295,10 +295,10 @@ ${renderCommands(commands)}
     command.printHeader({ headerLog, args: parsedArgs, opts: parsedOpts })
     const sessionId = uuidv4()
 
-    // Init enterprise API
+    // Init Cloud API
     let cloudApi: CloudApi | null = null
     if (!command.noProject) {
-      cloudApi = await CloudApi.factory({ log, currentDirectory: workingDir, sessionId })
+      cloudApi = await CloudApi.factory({ log, currentDirectory: workingDir })
     }
 
     // Init event & log streaming.
@@ -351,8 +351,11 @@ ${renderCommands(commands)}
     }
 
     const persistent = command.isPersistent(prepareParams)
+    // if (persistent && cloudApi) {
+    //   cloudApi.startWebSocketClient(sessionId)
+    // }
 
-    const { sessionSettings } = await command.prepare(prepareParams)
+    const { sessionSettings } = await command.prepare(prepareParams)
 
     contextOpts.persistent = persistent
     const { streamEvents, streamLogEntries } = command
@@ -468,6 +471,7 @@ ${renderCommands(commands)}
             ],
           }
           this.bufferedEventStream.connect(connectParams)
+          // cloudApi.setGarden(garden)
           if (streamEvents) {
             this.bufferedEventStream.streamEvent("commandInfo", commandInfo)
           }

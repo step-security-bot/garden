@@ -83,6 +83,7 @@ export class ToolsCommand extends Command<Args, Opts> {
     if (basicWriter) {
       basicWriter.output = process.stderr
     }
+    return {}
   }
 
   async action({ garden, log, args, opts }: CommandParams<Args>) {

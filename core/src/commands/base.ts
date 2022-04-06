@@ -30,7 +30,6 @@ import { renderOptions, renderCommands, renderArguments, getCliStyles } from "..
 import { GlobalOptions, ParameterValues, Parameters } from "../cli/params"
 import { GardenServer } from "../server/server"
 import { GardenCli } from "../cli/cli"
-import { CloudApi } from "../cloud/api"
 
 export interface CommandConstructor {
   new (parent?: CommandGroup): Command
@@ -64,7 +63,6 @@ export interface PrepareParams<T extends Parameters = {}, U extends Parameters =
   headerLog: LogEntry
   footerLog: LogEntry
   log: LogEntry
-  cloudApi?: CloudApi
 }
 
 export interface CommandParams<T extends Parameters = {}, U extends Parameters = {}> extends PrepareParams<T, U> {
@@ -74,10 +72,6 @@ export interface CommandParams<T extends Parameters = {}, U extends Parameters =
 }
 
 interface PrepareOutput {
-  /**
-   * Commands should set this to true if the command is long-running.
-   */
-  persistent: boolean
   /**
    * Currently only used for the `dev` command.
    */
@@ -231,7 +225,9 @@ export abstract class Command<T extends Parameters = {}, U extends Parameters = 
    * Called by the CLI before the command's action is run, but is not called again
    * if the command restarts. Useful for commands in watch mode.
    */
-  async prepare(_: PrepareParams<T, U>): Promise<void> {}
+  async prepare(_: PrepareParams<T, U>): Promise<PrepareOutput> {
+    return {}
+  }
 
   /**
    * Called by e.g. the WebSocket server to terminate persistent commands.

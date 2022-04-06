@@ -268,8 +268,9 @@ export interface Events extends LoggerEvents {
     durationMsec: number
   }
 
-  // Cloud UI events
   sessionSettings: SessionSettings
+
+  // Cloud UI events
   buildRequested: {
     moduleName: string
     force: boolean
@@ -307,6 +308,19 @@ export interface Events extends LoggerEvents {
 }
 
 export type EventName = keyof Events
+
+/**
+ * These events indicate a request from Cloud to Core.
+ */
+export const cloudRequestEventNames: EventName[] = [
+  "buildRequested",
+  "deployRequested",
+  "testRequested",
+  "taskRequested",
+  "setBuildOnWatch",
+  "setDeployOnWatch",
+  "setTestOnWatch",
+]
 
 // Note: Does not include logger events.
 export const pipedEventNames: EventName[] = [

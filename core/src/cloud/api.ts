@@ -21,6 +21,7 @@ import chalk from "chalk"
 import { GetProjectResponse } from "@garden-io/platform-api-types"
 import { getCloudDistributionName, getPackageVersion } from "../util/util"
 import { CommandInfo } from "../plugin-context"
+import { EventName, Events } from "../events"
 
 const gardenClientName = "garden-core"
 const gardenClientVersion = getPackageVersion()
@@ -123,8 +124,6 @@ export async function getEnterpriseConfig(currentDirectory: string) {
  */
 export class CloudApi {
   private intervalId: NodeJS.Timer | null
-  private readonly sessionId: string
-  private webSocketClient: EnterpriseWebSocketClient | null
   private log: LogEntry
   private intervalMsec = 4500 // Refresh interval in ms, it needs to be less than refreshThreshold/2
   private apiPrefix = "api"
@@ -137,26 +136,15 @@ export class CloudApi {
   public namespaceId?: number
   public sessionRegistered = false
 
-  constructor({
-    log,
-    enterpriseDomain,
-    projectId,
-    sessionId,
-  }: {
-    log: LogEntry
-    enterpriseDomain: string
-    projectId: string
-    sessionId: string
-  }) {
+  constructor({ log, enterpriseDomain, projectId }: { log: LogEntry; enterpriseDomain: string; projectId: string }) {
     this.log = log
+    // TODO: Replace all instances of "enterpriseDomain" with "cloudDomain".
     this.domain = enterpriseDomain
     this.projectId = projectId
-    this.sessionId = sessionId
-    this.webSocketClient = null
   }
 
   /**
-   * Initialize the Enterprise API.
+   * Initialize the Cloud API.
    *
    * Returns null if the project is not configured for Garden Cloud or if the user is not logged in.
    * Throws if the user is logged in but the token is invalid and can't be refreshed.
@@ -167,12 +155,10 @@ export class CloudApi {
   static async factory({
     log,
     currentDirectory,
-    sessionId,
     skipLogging = false,
   }: {
     log: LogEntry
     currentDirectory: string
-    sessionId: string
     skipLogging?: boolean
   }) {
     log.debug("Initializing Garden Cloud API client.")
@@ -189,7 +175,7 @@ export class CloudApi {
       return null
     }
 
-    const api = new CloudApi({ log, enterpriseDomain: config.domain, projectId: config.projectId, sessionId })
+    const api = new CloudApi({ log, enterpriseDomain: config.domain, projectId: config.projectId })
     const tokenIsValid = await api.checkClientAuthToken()
 
     const distroName = getCloudDistributionName(config.domain)
@@ -349,9 +335,6 @@ export class CloudApi {
       clearInterval(this.intervalId)
       this.intervalId = null
     }
-    if (this.webSocketClient) {
-      this.webSocketClient.close()
-    }
   }
 
   private async refreshTokenIfExpired() {
@@ -495,19 +478,19 @@ export class CloudApi {
     }
   }
 
-  async startWebSocketClient() {
-    const authToken = await CloudApi.getAuthToken(this.log)
-    if (!authToken) {
-      this.log.debug("No auth token available, skipping websocket connection.")
-      return
-    }
-    this.webSocketClient = new EnterpriseWebSocketClient({
-      log: this.log,
-      enterpriseDomain: this.domain,
-      authToken,
-      sessionId: this.sessionId,
-    })
-  }
+  // async startWebSocketClient(sessionId: string) {
+  //   const authToken = await CloudApi.getAuthToken(this.log)
+  //   if (!authToken) {
+  //     this.log.debug("No auth token available, skipping websocket connection.")
+  //     return
+  //   }
+  //   this.webSocketClient = new CloudWebSocketClient({
+  //     log: this.log,
+  //     enterpriseDomain: this.domain,
+  //     authToken,
+  //     sessionId,
+  //   })
+  // }
 
   async get<T>(path: string, opts: ApiFetchOptions = {}) {
     const { headers, retry, retryDescription, maxRetries } = opts
@@ -626,34 +609,93 @@ export class CloudApi {
   }
 }
 
-export class EnterpriseWebSocketClient {
-  private log: LogEntry
-  private garden: Garden | undefined
-  private ws: WebSocket
-  private url: string
-
-  constructor({
-    log,
-    enterpriseDomain,
-    authToken,
-    sessionId
-  }: {
-    log: LogEntry
-    enterpriseDomain: string
-    authToken: string
-    sessionId: string
-  }) {
-    this.log = log
-    const tokenParam = !!gardenEnv.GARDEN_AUTH_TOKEN ? "ciToken" : "accessToken"
-    const getWsUrl = (token: string) => `ws://${enterpriseDomain}/ws/cli?${tokenParam}=${token}&sessionId=${sessionId}`
-    this.log.debug(`Connecting websocket client to ${getWsUrl("[FILTERED]")}`)
-    this.url = getWsUrl(authToken)
-    this.ws = new WebSocket(this.url)
-  }
-
-  setGarden(garden: Garden) {
-  }
-
-  close() {
-  }
+export interface CloudWebsocketRequest {
+  events: CloudRequestEvent[]
 }
+
+// TODO: Add stricter typing (constrain event names to only cloud events)
+export interface CloudRequestEvent {
+  name: EventName
+  payload: Events[EventName]
+}
+
+// export class CloudWebSocketClient {
+//   private log: LogEntry
+//   private garden: Garden | undefined
+//   private ws: WebSocket
+//   private url: string
+
+//   /**
+//    * We maintain this map to facilitate unsubscribing from a previous Garden instance's event bus
+//    * when a new Garden instance is connected.
+//    */
+//   // private gardenEventListeners: { [eventName: string]: (payload: any) => void }
+
+//   constructor({
+//     log,
+//     enterpriseDomain,
+//     authToken,
+//     sessionId,
+//   }: {
+//     log: LogEntry
+//     enterpriseDomain: string
+//     authToken: string
+//     sessionId: string
+//   }) {
+//     this.log = log
+//     const tokenParam = !!gardenEnv.GARDEN_AUTH_TOKEN ? "ciToken" : "accessToken"
+//     const getWsUrl = (token: string) => `ws://${enterpriseDomain}/ws/cli?${tokenParam}=${token}&sessionId=${sessionId}`
+//     // const getWsUrl = (token: string) => `ws://${enterpriseDomain}/ws/cli?${tokenParam}=${token}&sessionId=${sessionId}`
+//     this.log.debug(`Connecting websocket client to ${getWsUrl("[FILTERED]")}`)
+//     this.url = getWsUrl(authToken)
+//     this.ws = new WebSocket(this.url)
+//     this.ws.on("open", () => {
+//       console.log("ws open")
+//     })
+//     this.ws.on("close", () => {
+//       console.log("ws closed")
+//     })
+//     this.ws.on("upgrade", () => {
+//       console.log("ws upgraded")
+//     })
+//     this.ws.on("ping", () => {
+//       console.log("ping -> pong")
+//       this.ws.pong()
+//     })
+//     this.ws.on("error", (err) => {
+//       console.log("ws err", err)
+//       console.log("ws err string", JSON.stringify(err))
+//     })
+//     this.ws.on("message", (msg) => {
+//       const parsed: CloudWebsocketRequest = JSON.parse(msg.toString())
+//       const event = parsed.events[0]
+//       console.log(`onMessage: parsed ${JSON.stringify(parsed)}, event ${event}`)
+//       if (cloudRequestEventNames.includes(event.name) && this.garden) {
+//         console.log(`emitting ${event.name} with payload ${JSON.stringify(event.payload)}`)
+//         this.garden.events.emit(event.name, event.payload)
+//       }
+//     })
+//   }
+
+//   connect(garden: Garden) {
+//     this.garden = garden
+//     // if (this.garden) {
+//     //   // Unsubscribe from the old Garden instance's event bus
+//     //   for (const [gardenEventName, listener] of Object.entries(this.gardenEventListeners)) {
+//     //     this.garden.events.removeListener(gardenEventName, listener)
+//     //   }
+//     // }
+
+//     // // Subscribe to the requested Garden instance's event bus
+
+//     // const gardenEventListeners = {}
+//     // for (const gardenEventName of cloudRequestEventNames) {
+//     //   const listener = (payload: LogEntryEventPayload) => this.streamEvent(gardenEventName, payload)
+//     //   gardenEventListeners[gardenEventName] = listener
+//     //   eventBus.on(gardenEventName, listener)
+//     // }
+//     // this.gardenEventListeners = gardenEventListeners
+//   }
+
+//   close() {}
+// }

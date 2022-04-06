@@ -133,6 +133,8 @@ export class DeployCommand extends Command<Args, Opts> {
     if (this.isPersistent(params)) {
       this.server = await startServer({ log: params.footerLog })
     }
+    // TODO: Return `sessionSettings`
+    return {}
   }
 
   terminate() {

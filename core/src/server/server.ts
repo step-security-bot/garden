@@ -260,7 +260,10 @@ export class GardenServer {
       this.debugLog.silly(JSON.stringify(batch.events, null, 2))
 
       // Pipe the events to the incoming stream, which websocket listeners will then receive
-      batch.events.forEach((e) => this.incomingEvents.emit(e.name, e.payload))
+      batch.events.forEach((e) => {
+        // console.log(`/events: received ${e.name}, payload ${JSON.stringify(e.payload)}`)
+        this.incomingEvents.emit(e.name, e.payload)
+      })
       // batch.events.forEach((e) => this.garden!.events.emit(e.name, e.payload))
 
       ctx.status = 200
@@ -316,7 +319,8 @@ export class GardenServer {
         this.log.debug(`Send event: ${JSON.stringify(event)}`)
         websocket.send(JSON.stringify(event), (err) => {
           if (err) {
-            this.debugLog.debug({ error: toGardenError(err) })
+            this.debugLog.info({ error: toGardenError(err) })
+            // this.debugLog.debug({ error: toGardenError(err) })
           }
         })
       }
@@ -338,17 +342,20 @@ export class GardenServer {
 
       let heartbeatInterval = setInterval(() => {
         if (!isAlive) {
-          this.log.debug(`Connection ${connId} timed out.`)
+          this.log.info(`Connection ${connId} timed out.`)
+          // this.log.debug(`Connection ${connId} timed out.`)
           websocket.terminate()
         }
 
         isAlive = false
-        this.log.debug(`Connection ${connId} ping.`)
+        this.log.info(`Connection ${connId} ping.`)
+        // this.log.debug(`Connection ${connId} ping.`)
         websocket.ping(() => {})
       }, 1000)
 
       websocket.on("pong", () => {
-        this.log.debug(`Connection ${connId} pong.`)
+        this.log.info(`Connection ${connId} pong.`)
+        // this.log.debug(`Connection ${connId} pong.`)
         isAlive = true
       })
 
@@ -358,7 +365,8 @@ export class GardenServer {
       this.incomingEvents.onAny(eventListener)
 
       const cleanup = () => {
-        this.log.debug(`Connection ${connId} terminated, cleaning up.`)
+        this.log.info(`Connection ${connId} terminated, cleaning up.`)
+        // this.log.debug(`Connection ${connId} terminated, cleaning up.`)
         clearInterval(heartbeatInterval)
 
         this.garden && this.garden.events.offAny(eventListener)
@@ -379,7 +387,8 @@ export class GardenServer {
       websocket.on("message", (msg) => {
         let request: any
 
-        this.log.debug("Got request: " + msg)
+        this.log.info("Got request: " + msg)
+        // this.log.debug("Got request: " + msg)
 
         try {
           request = JSON.parse(msg.toString())

@@ -378,6 +378,7 @@ describe("cli", () => {
 
         async prepare({ footerLog }: PrepareParams) {
           this.server = await startServer({ log: footerLog })
+          return {}
         }
 
         printHeader() {}
@@ -465,6 +466,7 @@ describe("cli", () => {
         async prepare({ footerLog }: PrepareParams) {
           this.server = await startServer({ log: footerLog })
           this.server["incomingEvents"] = testEventBus
+          return {}
         }
 
         printHeader() {}
@@ -494,6 +496,7 @@ describe("cli", () => {
 
         async prepare({ footerLog }: PrepareParams) {
           this.server = await startServer({ log: footerLog })
+          return {}
         }
 
         printHeader() {}
@@ -545,6 +548,7 @@ describe("cli", () => {
 
         async prepare({ footerLog }: PrepareParams) {
           this.server = await startServer({ log: footerLog })
+          return {}
         }
 
         printHeader() {}

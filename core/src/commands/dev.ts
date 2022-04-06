@@ -6,13 +6,12 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-import WebSocket from "ws"
 import Bluebird from "bluebird"
 import deline = require("deline")
 import dedent = require("dedent")
 import chalk from "chalk"
 import { readFile } from "fs-extra"
-import { flatten, isEmpty, omit } from "lodash"
+import { flatten, isEmpty } from "lodash"
 import moment = require("moment")
 import { join } from "path"
 
@@ -26,7 +25,7 @@ import {
   SessionSettings,
   prepareSessionSettings,
 } from "./base"
-import { gardenEnv, STATIC_DIR } from "../constants"
+import { STATIC_DIR } from "../constants"
 import { processModules } from "../process"
 import { GardenModule } from "../types/module"
 import { getTestTasks } from "../tasks/test"
@@ -117,7 +116,7 @@ export class DevCommand extends Command<DevCommandArgs, DevCommandOpts> {
     return true
   }
 
-  async prepare({ headerLog, footerLog, args, opts, cloudApi }: PrepareParams<DevCommandArgs, DevCommandOpts>) {
+  async prepare({ headerLog, footerLog, args, opts }: PrepareParams<DevCommandArgs, DevCommandOpts>) {
     // print ANSI banner image
     if (chalk.supportsColor && chalk.supportsColor.level > 2) {
       const data = await readFile(ansiBannerPath)
@@ -127,9 +126,9 @@ export class DevCommand extends Command<DevCommandArgs, DevCommandOpts> {
     headerLog.info(chalk.gray.italic(`Good ${getGreetingTime()}! Let's get your environment wired up...`))
     headerLog.info("")
 
-    if (cloudApi) {
-      cloudApi.startWebSocketClient()
-    }
+    // if (cloudApi) {
+    //   cloudApi.startWebSocketClient()
+    // }
 
     this.server = await startServer({ log: footerLog })
     const sessionSettings = prepareSessionSettings({
@@ -140,7 +139,7 @@ export class DevCommand extends Command<DevCommandArgs, DevCommandOpts> {
       hotReloadServiceNames: opts["hot-reload"] || [],
     })
 
-    return { persistent: true, sessionSettings }
+    return { sessionSettings }
   }
 
   terminate() {
@@ -181,7 +180,7 @@ export class DevCommand extends Command<DevCommandArgs, DevCommandOpts> {
       }
     }
 
-    await wsConnect(garden)
+    // await wsConnect(garden)
 
     const initialTasks = await getDevCommandInitialTasks({
       garden,
@@ -367,51 +366,4 @@ function getGreetingTime() {
   } else {
     return "morning"
   }
-}
-
-async function wsConnect(garden: Garden) {
-  const validEvents = ["deployRequested", "buildRequested", "testRequested"]
-  const authToken = gardenEnv.GARDEN_AUTH_TOKEN
-  const tokenParam = !!gardenEnv.GARDEN_AUTH_TOKEN ? "ciToken" : "accessToken"
-  const wsUrl = `wss://ths.dev.enterprise.garden.io/ws/cli?${tokenParam}=${authToken}&sessionId=${garden.sessionId}`
-  console.log(`will connect ws: url ${wsUrl}`)
-  // if (garden.enterpriseApi) {
-  const ws = new WebSocket(wsUrl)
-  ws.on("open", () => {
-    // console.log("ws open")
-  })
-  ws.on("close", () => {
-    // console.log("ws closed")
-  })
-  ws.on("upgrade", () => {
-    // console.log("ws upgraded")
-  })
-  ws.on("ping", () => {
-    ws.pong()
-  })
-  ws.on("error", (err) => {
-    console.log("ws err", err)
-    console.log("ws err string", JSON.stringify(err))
-  })
-  ws.on("message", (msg) => {
-    const parsed = JSON.parse(msg.toString())
-    console.log(parsed)
-    if (validEvents.includes(parsed.event)) {
-      const payload = omit(parsed, "event")
-      garden.events.emit(parsed.event, payload)
-    }
-  })
-
-  garden.events.onAny((name, payload) => {
-    if (ws.readyState === 1) {
-      const content = { type: "event", body: { name, payload } }
-      // console.log(`sending event via ws: ${JSON.stringify(content, null, 2)}`)
-      ws.send(JSON.stringify(content))
-    }
-  })
-
-  // setInterval(() => {
-  //   ws.send(JSON.stringify({ type: "event", name: "foo", message: "ello ello" }))
-  // }, 1000)
-  // }
 }

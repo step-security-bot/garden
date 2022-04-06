@@ -254,6 +254,7 @@ export async function processModules({
         log,
       }
       garden.events.on("buildRequested", async (event: Events["buildRequested"]) => {
+        console.log(`process: handling buildRequested event ${JSON.stringify(event)}`)
         try {
           graph = await garden.getConfigGraph({ log, emit: false })
           log.info("")
