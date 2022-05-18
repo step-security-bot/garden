@@ -82,9 +82,9 @@ export async function createIngressResources(
       (ic) => ic.metadata.name === provider.config.ingressClass
     )
     if (!ingressclassWithCorrectName) {
-      log.warn(
-        chalk.yellow(`ingressclass with name "${provider.config.ingressClass}" was not found, ingress might not work`)
-      )
+      // log.warn(
+      //   chalk.yellow(`ingressclass with name "${provider.config.ingressClass}" was not found, ingress might not work`)
+      // )
     }
   }
 
