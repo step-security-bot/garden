@@ -6,11 +6,11 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-import { ContainerLocalModeSpec, ContainerService, ContainerServiceSpec, ServicePortSpec } from "../container/config"
-import { gardenAnnotationKey } from "../../util/string"
+import { ContainerService, ContainerServiceSpec, ServicePortSpec } from "../container/config"
+import { dedent, gardenAnnotationKey } from "../../util/string"
 import { set } from "lodash"
 import { HotReloadableResource } from "./hot-reload/hot-reload"
-import { PrimitiveMap } from "../../config/common"
+import { joi, joiIdentifier, PrimitiveMap } from "../../config/common"
 import {
   PROXY_CONTAINER_SSH_TUNNEL_PORT,
   PROXY_CONTAINER_SSH_TUNNEL_PORT_NAME,
@@ -37,6 +37,99 @@ import getPort = require("get-port")
 import touch = require("touch")
 
 export const localModeGuideLink = "https://docs.garden.io/guides/running-service-in-local-mode.md"
+
+const defaultLocalModeRestartDelayMsec = 1000
+const defaultLocalModeMaxRestarts = Number.POSITIVE_INFINITY
+
+export interface LocalModeRestartSpec {
+  delayMsec: number
+  max: number
+}
+
+export const localModeRestartSchema = () =>
+  joi
+    .object()
+    .keys({
+      delayMsec: joi
+        .number()
+        .integer()
+        .greater(-1)
+        .optional()
+        .default(defaultLocalModeRestartDelayMsec)
+        .description(
+          `Delay in milliseconds between the local application restart attempts. The default value is ${defaultLocalModeRestartDelayMsec}ms.`
+        ),
+      max: joi
+        .number()
+        .integer()
+        .greater(-1)
+        .optional()
+        .default(defaultLocalModeMaxRestarts)
+        .description("Max number of the local application restarts. Unlimited by default."),
+    })
+    .optional()
+    .default({
+      delayMsec: defaultLocalModeRestartDelayMsec,
+      max: defaultLocalModeMaxRestarts,
+    })
+    .description(
+      `Specifies restarting policy for the local application. By default, the local application will be restarting infinitely with ${defaultLocalModeRestartDelayMsec}ms between attempts.`
+    )
+
+export interface ContainerLocalModeSpec {
+  localPort: number
+  command?: string[]
+  restart: LocalModeRestartSpec
+}
+
+const localModeDescription = (mentionServiceResource: boolean) => {
+  const serviceResourceDescription = mentionServiceResource
+    ? "Note that `serviceResource` must also be specified to enable local mode.\n\n"
+    : ""
+  return dedent`
+    Specifies necessary configuration details of the local application which will replace a target remote service.
+
+    The target service will be replaced by a proxy container with an SSH server running,
+    and the reverse port forwarding will be automatically configured to route the traffic to the local service and back.
+
+    ${serviceResourceDescription}
+    Local mode is enabled by setting the \`--local\` option on the \`garden deploy\` or \`garden dev\` commands.
+    The local mode always takes the precedence over the dev mode if there are any conflicts service names.
+
+    The health checks are disabled for services running in local mode.
+
+    See the [Local Mode guide](${localModeGuideLink}) for more information.
+  `
+}
+
+export const containerLocalModeSchema = () =>
+  joi
+    .object()
+    .keys({
+      localPort: joi.number().description("The working port of the local application."),
+      command: joi
+        .sparseArray()
+        .optional()
+        .items(joi.string())
+        .description(
+          "The command to run the local application. If not present, then the local application should be started manually."
+        ),
+      restart: localModeRestartSchema(),
+    })
+    .description(localModeDescription(false))
+
+export interface KubernetesLocalModeSpec extends ContainerLocalModeSpec {
+  containerName?: string
+}
+
+export const kubernetesLocalModeSchema = () =>
+  containerLocalModeSchema()
+    .keys({
+      containerName: joiIdentifier().description(
+        `Optionally specify the name of a specific container to sync to. If not specified, the first container in the workload is used.`
+      ),
+    })
+    .description(localModeDescription(true))
 
 const localhost = "127.0.0.1"
 

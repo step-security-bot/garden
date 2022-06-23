@@ -41,6 +41,7 @@ import { posix } from "path"
 import { runPodSpecIncludeFields } from "../run"
 import { omit } from "lodash"
 import { kubernetesDevModeSchema, KubernetesDevModeSpec } from "../dev-mode"
+import { kubernetesLocalModeSchema, KubernetesLocalModeSpec } from "../local-mode"
 
 export const defaultHelmTimeout = 300
 
@@ -58,6 +59,7 @@ export interface HelmServiceSpec {
   chartPath: string
   dependencies: string[]
   devMode?: KubernetesDevModeSpec
+  localMode?: KubernetesLocalModeSpec
   namespace?: string
   portForwards?: PortForwardSpec[]
   releaseName?: string
@@ -172,6 +174,7 @@ export const helmModuleSpecSchema = () =>
       "List of names of services that should be deployed before this chart."
     ),
     devMode: kubernetesDevModeSchema(),
+    localMode: kubernetesLocalModeSchema(),
     include: joiModuleIncludeDirective(dedent`
       If neither \`include\` nor \`exclude\` is set, and the module has local chart sources, Garden
       automatically sets \`include\` to: \`["*", "charts/**/*", "templates/**/*"]\`.
