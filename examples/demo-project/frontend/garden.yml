@@ -22,6 +22,16 @@ tests:
   - name: unit
     args: [npm, test]
   - name: integ
-    args: [npm, run, integ]
+    command: ["npm"]
+    args: ["run", "integ"]
     dependencies:
       - frontend
+    cpu:
+      min: 1000
+      max: 1000
+    memory:
+      min: 1000
+      max: 1000
+#    artifacts:
+#    - source: "/app/package.json"
+#      target: "./output-artifacts"
