@@ -31,6 +31,8 @@ import { dedent } from "../../../../../src/util/string"
 import { sleep } from "../../../../../src/util/util"
 import { defaultDotIgnoreFile } from "../../../../../src/util/fs"
 import { configureExecModule } from "../../../../../src/plugins/exec/moduleConfig"
+import { actionFromConfig } from "../../../../../src/graph/actions"
+import { TestAction, TestActionConfig, testActionConfig } from "../../../../../src/actions/test"
 
 describe("exec plugin", () => {
   const moduleName = "module-a"
@@ -299,12 +301,13 @@ describe("exec plugin", () => {
   it("should propagate task logs to runtime outputs", async () => {
     const _garden = await makeTestGarden(getDataDir("test-projects", "exec-task-outputs"))
     const _graph = await _garden.getConfigGraph({ log: _garden.log, emit: false })
-    const taskB = _graph.getTask("task-b")
+    const taskB = _graph.getRun("task-b")
 
     const taskTask = new RunTask({
       garden: _garden,
       graph: _graph,
-      task: taskB,
+      action: taskB,
+      fromWatch: false,
       log: _garden.log,
       force: false,
       forceBuild: false,
@@ -325,12 +328,13 @@ describe("exec plugin", () => {
   it("should copy artifacts after task runs", async () => {
     const _garden = await makeTestGarden(getDataDir("test-projects", "exec-artifacts"))
     const _graph = await _garden.getConfigGraph({ log: _garden.log, emit: false })
-    const task = _graph.getTask("task-a")
+    const run = _graph.getRun("task-a")
 
     const taskTask = new RunTask({
       garden: _garden,
       graph: _graph,
-      task,
+      action: run,
+      fromWatch: false,
       log: _garden.log,
       force: false,
       forceBuild: false,
@@ -349,12 +353,13 @@ describe("exec plugin", () => {
   it("should copy artifacts after test runs", async () => {
     const _garden = await makeTestGarden(getDataDir("test-projects", "exec-artifacts"))
     const _graph = await _garden.getConfigGraph({ log: _garden.log, emit: false })
-    const test = _graph.getTest("module-a", "test-a")
+    const test = _graph.getTest("module-a.test-a")
 
     const testTask = new TestTask({
       garden: _garden,
       graph: _graph,
-      test,
+      action: test,
+      fromWatch: false,
       log: _garden.log,
       force: false,
       forceBuild: false,
@@ -396,44 +401,67 @@ describe("exec plugin", () => {
 
   describe("build", () => {
     it("should write a build version file after building", async () => {
-      const module = graph.getModule(moduleName)
-      const buildMetadataPath = module.buildMetadataPath
+      const action = graph.getBuild(moduleName)
+      const buildMetadataPath = action.getBuildMetadataPath()
       const versionFilePath = join(buildMetadataPath, GARDEN_BUILD_VERSION_FILENAME)
 
-      await garden.buildStaging.syncFromSrc(module, log)
+      await garden.buildStaging.syncFromSrc(action, log)
       const actions = await garden.getActionRouter()
-      await actions.build.build({ log, module, graph })
+      const resolvedAction = await garden.resolveAction({ action, graph, log })
+      await actions.build.build({ log, action: resolvedAction, graph })
 
       const versionFileContents = await readModuleVersionFile(versionFilePath)
 
-      expect(versionFileContents).to.eql(module.version)
+      expect(versionFileContents).to.eql(action.versionString())
     })
 
     it("should run the build command in the module dir if local true", async () => {
-      const module = graph.getModule("module-local")
+      const action = graph.getBuild("module-local")
       const actions = await garden.getActionRouter()
-      const res = await actions.build.build({ log, module, graph })
-      expect(res.buildLog).to.eql(join(garden.projectRoot, "module-local"))
+      const resolvedAction = await garden.resolveAction({ action, log, graph })
+      const res = await actions.build.build({ log, action: resolvedAction, graph })
+      // TODO-G2 figure the expect out here
+      expect(res.detail).to.eql(join(garden.projectRoot, "module-local"))
     })
 
     it("should receive module version as an env var", async () => {
-      const module = graph.getModule("module-local")
+      const action = graph.getBuild("module-local")
       const actions = await garden.getActionRouter()
 
-      module.spec.build.command = ["echo", "$GARDEN_MODULE_VERSION"]
-      const res = await actions.build.build({ log, module, graph })
+      action._config.spec.command = ["echo", "$GARDEN_MODULE_VERSION"]
+      const resolvedAction = await garden.resolveAction({ log, graph, action })
+      const res = await actions.build.build({ log, action: resolvedAction, graph })
 
-      expect(res.buildLog).to.equal(module.version.versionString)
+      // TODO-G2 figure the expect out here
+      expect(res.outputs).to.equal(action.versionString())
     })
   })
 
   describe("testExecModule", () => {
     it("should run the test command in the module dir if local true", async () => {
-      const module = graph.getModule("module-local")
-      const actions = await garden.getActionRouter()
-      const res = await actions.test.run({
+      const router = await garden.getActionRouter()
+      const rawAction = (await actionFromConfig({
+        garden,
+        graph,
+        router,
         log,
-        module,
+        config: {
+          type: "test",
+          kind: "Test",
+          name: "test",
+          dependencies: [],
+          disabled: false,
+          timeout: 1234,
+          spec: {
+            command: ["pwd"],
+          },
+          basePath: "TODO-G2",
+        } as TestActionConfig,
+        configsByKey: {},
+      })) as TestAction
+      const action = await garden.resolveAction<TestAction>({ action: rawAction, graph, log })
+      const res = await router.test.run({
+        log,
         interactive: true,
         graph,
         runtimeContext: {
@@ -441,21 +469,9 @@ describe("exec plugin", () => {
           dependencies: [],
         },
         silent: false,
-        test: testFromConfig(
-          module,
-          {
-            name: "test",
-            dependencies: [],
-            disabled: false,
-            timeout: 1234,
-            spec: {
-              command: ["pwd"],
-            },
-          },
-          graph
-        ),
+        action,
       })
-      expect(res.log).to.eql(join(garden.projectRoot, "module-local"))
+      expect(res.outputs).to.eql(join(garden.projectRoot, "module-local"))
     })
 
     it("should receive module version as an env var", async () => {
